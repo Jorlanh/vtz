@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -15,9 +14,12 @@ import {
   Clock,
   ArrowRight,
   ShieldAlert,
-  Calendar
+  Calendar,
+  Wallet,
+  Shield
 } from 'lucide-react';
 import { MockService } from '../services/mockDataService';
+import { api } from '../services/api'; // Adicionado para dados reais
 import { Assembly, User } from '../types';
 
 interface DashboardProps {
@@ -26,15 +28,47 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const [assemblies, setAssemblies] = useState<Assembly[]>([]);
-  
+  // --- NOVOS ESTADOS PARA DADOS REAIS ---
+  const [financial, setFinancial] = useState({ balance: 0, lastUpdate: '' });
+  const [condoUsers, setCondoUsers] = useState<User[]>([]);
+  const [showUserList, setShowUserList] = useState(false); // Estado para controlar a exibição da lista
+
   useEffect(() => {
-    MockService.getAssemblies().then(setAssemblies);
+    // Mantendo sua lógica original e acrescentando a carga de dados reais
+    loadData();
   }, []);
 
-  const activeAssemblies = assemblies.filter(a => a.status === 'OPEN');
-  const totalVotes = assemblies.reduce((acc, curr) => acc + curr.votes.length, 0);
+  const loadData = async () => {
+    try {
+      // Busca assembleias (Real), Saldo (Real) e Usuários (Real)
+      const [assData, finData, usersData] = await Promise.all([
+        api.get('/assemblies'),
+        api.get('/financial/balance'),
+        api.get('/users')
+      ]);
+      setAssemblies(assData || []);
+      setFinancial(finData || { balance: 0, lastUpdate: 'N/A' });
+      setCondoUsers(usersData || []);
+    } catch (e) {
+      console.error("Erro ao carregar dados do backend");
+      // Fallback para não quebrar o visual caso o banco esteja vazio
+      MockService.getAssemblies().then(setAssemblies);
+    }
+  };
 
-  // Mock Data for Charts
+  // --- NOVA FUNÇÃO: PROMOVER USUÁRIO ---
+  const handlePromoteUser = async (userId: string) => {
+    if (window.confirm("Deseja dar cargo de Administrador a este usuário?")) {
+      await api.patch(`/users/${userId}/role`, { role: 'MANAGER' });
+      alert("Usuário promovido!");
+      loadData();
+    }
+  };
+
+  const activeAssemblies = assemblies.filter(a => a.status === 'OPEN');
+  const totalVotes = assemblies.reduce((acc, curr) => acc + (curr.votes?.length || 0), 0);
+
+  // Mock Data for Charts (Mantidos para preservar o seu design)
   const chartData = [
     { name: 'Jan', votos: 40, participacao: 20 },
     { name: 'Fev', votos: 30, participacao: 25 },
@@ -49,7 +83,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     { name: 'Pendentes', value: 22, color: '#e2e8f0' }
   ];
 
-  // Identificar assembleias críticas (Ex: acabam em breve com quórum baixo)
   const criticalAssemblies = activeAssemblies.filter(a => {
     const hoursLeft = (new Date(a.endDate).getTime() - Date.now()) / 36e5;
     return hoursLeft < 48 && hoursLeft > 0;
@@ -77,6 +110,46 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         </div>
       </div>
 
+      {/* --- ACRESCIMO: CARD DE SALDO REAL COM INSERÇÃO MANUAL --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-xl border-b-4 border-emerald-500 relative overflow-hidden">
+          <div className="relative z-10">
+            <p className="text-emerald-400 text-xs font-bold uppercase tracking-widest">Saldo Atual em Caixa</p>
+            <h2 className="text-4xl font-black mt-2">R$ {financial.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+            <p className="text-slate-400 text-xs mt-4 italic">Última atualização do ADM: {financial.lastUpdate}</p>
+            
+            {/* Permite ao Administrador atualizar a hora que quiser */}
+            {isManager && (
+              <button 
+                onClick={() => {
+                  const val = prompt("Informe o saldo atualizado (R$):", financial.balance.toString());
+                  if(val && !isNaN(parseFloat(val))) {
+                    api.post('/financial/update', { balance: parseFloat(val) }).then(loadData);
+                  }
+                }}
+                className="mt-6 flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg font-bold text-[10px] uppercase transition-all shadow-lg"
+              >
+                <Plus size={14} /> Atualizar Saldo Agora
+              </button>
+            )}
+          </div>
+          <Wallet className="absolute right-[-10px] bottom-[-10px] text-white/5 w-40 h-40" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+           <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col justify-center">
+              <Users className="text-blue-500 mb-2" />
+              <p className="text-2xl font-bold text-slate-800">{condoUsers.length}</p>
+              <p className="text-xs text-slate-500 font-medium">Moradores Reais</p>
+           </div>
+           <div className="bg-white p-6 rounded-2xl border shadow-sm flex flex-col justify-center">
+              <CheckCircle className="text-emerald-500 mb-2" />
+              <p className="text-2xl font-bold text-slate-800">{totalVotes}</p>
+              <p className="text-xs text-slate-500 font-medium">Votos Computados</p>
+           </div>
+        </div>
+      </div>
+
       {/* Quick Actions (Manager Only) */}
       {isManager && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -101,11 +174,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             <span className="font-bold text-sm">Relatórios</span>
           </Link>
 
-          <div className="bg-white border border-slate-200 text-slate-600 p-4 rounded-xl shadow-sm transition-all flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50">
-            <div className="bg-slate-100 p-2 rounded-full mb-2">
-              <Users className="w-6 h-6 text-slate-500" />
+          {/* AO CLICAR AQUI, ALTERNA A EXIBIÇÃO DA LISTA DE USUÁRIOS */}
+          <div 
+            onClick={() => setShowUserList(!showUserList)}
+            className={`bg-white border p-4 rounded-xl shadow-sm transition-all flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 ${showUserList ? 'ring-2 ring-emerald-500 border-emerald-500' : 'border-slate-200 text-slate-600'}`}
+          >
+            <div className={`p-2 rounded-full mb-2 ${showUserList ? 'bg-emerald-100' : 'bg-slate-100'}`}>
+              <Users className={`w-6 h-6 ${showUserList ? 'text-emerald-600' : 'text-slate-500'}`} />
             </div>
-            <span className="font-medium text-sm">Gerenciar Usuários</span>
+            <span className={`text-sm ${showUserList ? 'font-bold text-emerald-700' : 'font-medium'}`}>
+              {showUserList ? 'Fechar Gestão' : 'Gerenciar Usuários'}
+            </span>
           </div>
         </div>
       )}
@@ -129,6 +208,54 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           </div>
         ))}
       </div>
+
+      {/* --- ACRESCIMO: LISTA DE USUÁRIOS REAIS (APARECE QUANDO CLICADO NO BOTÃO ACIMA) --- */}
+      {showUserList && isManager && (
+        <div className="bg-white p-6 rounded-2xl border-2 border-emerald-500 shadow-xl animate-in slide-in-from-top-4 duration-300">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800">
+              <Shield className="w-5 h-5 text-emerald-600" /> Membros Cadastrados no Banco de Dados
+            </h3>
+            <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full font-bold">
+              {condoUsers.length} total
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead>
+                <tr className="text-slate-400 border-b border-slate-100">
+                  <th className="pb-3 px-2 font-medium">Nome Completo</th>
+                  <th className="pb-3 px-2 font-medium">Unidade</th>
+                  <th className="pb-3 px-2 font-medium text-right">Ações de Cargo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {condoUsers.map(u => (
+                  <tr key={u.id} className="border-b last:border-0 hover:bg-slate-50 transition-colors">
+                    <td className="py-4 px-2 font-bold text-slate-700">{u.name}</td>
+                    <td className="py-4 px-2 text-slate-600">{u.unit}</td>
+                    <td className="py-4 px-2 text-right">
+                      {u.role !== 'MANAGER' ? (
+                        <button 
+                          onClick={() => handlePromoteUser(u.id)}
+                          className="text-xs font-black text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors"
+                        >
+                          PROMOVER A ADM
+                        </button>
+                      ) : (
+                        <div className="flex items-center justify-end gap-1 text-slate-400">
+                          <Shield size={12} />
+                          <span className="text-[10px] font-black uppercase tracking-tighter">Administrador</span>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Chart */}
@@ -163,7 +290,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
         {/* Alerts & Quorum */}
         <div className="space-y-6">
-           {/* Critical Alerts Widget */}
+            <Link to="/governance" className="block bg-blue-600 p-6 rounded-2xl text-white shadow-lg hover:bg-blue-700 transition-all group">
+              <h3 className="font-bold flex items-center justify-between">
+                Abrir Chamado <ArrowRight className="group-hover:translate-x-1 transition-transform" />
+              </h3>
+              <p className="text-blue-100 text-xs mt-2">Relate problemas técnicos ou de convivência à administração.</p>
+            </Link>
+
            {criticalAssemblies.length > 0 ? (
              <div className="bg-orange-50 p-5 rounded-xl border border-orange-100">
                <div className="flex items-center gap-2 mb-3">
@@ -185,14 +318,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                </div>
              </div>
            ) : (
-             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-[200px] flex flex-col items-center justify-center text-center">
-                <CheckCircle className="w-12 h-12 text-emerald-200 mb-3" />
+             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-[150px] flex flex-col items-center justify-center text-center">
+                <CheckCircle className="w-8 h-8 text-emerald-200 mb-3" />
                 <h3 className="font-bold text-slate-700">Tudo em dia!</h3>
-                <p className="text-xs text-slate-500 mt-1">Nenhuma assembleia crítica no momento.</p>
              </div>
            )}
 
-           {/* Quorum Chart */}
            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
              <h3 className="font-bold text-slate-800 mb-4 text-sm">Status Quórum (AGE Atual)</h3>
              <div className="h-40 flex items-center justify-center relative">

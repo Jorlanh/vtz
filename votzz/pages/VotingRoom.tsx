@@ -1,11 +1,10 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   FileText, Send, Lock, Clock, ArrowLeft, Download, MessageSquare, 
-  AlertCircle, Eye, EyeOff, Gavel, Scale, FileCheck, Shield
+  AlertCircle, Eye, EyeOff, Gavel, Scale, FileCheck, Shield, Video
 } from 'lucide-react';
-import { MockService } from '../services/mockDataService';
+import { api } from '../services/api'; 
 import { analyzeSentiment } from '../services/geminiService';
 import { Assembly, User, VotePrivacy, AssemblyStatus } from '../types';
 
@@ -18,8 +17,8 @@ const VotingRoom: React.FC<{ user: User }> = ({ user }) => {
   const [chatMsg, setChatMsg] = useState('');
   const [voteReceipt, setVoteReceipt] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
+  const [showLive, setShowLive] = useState(false);
   
-  // Manager State
   const [activeTab, setActiveTab] = useState<'VOTE' | 'MANAGE'>('VOTE');
   const [closing, setClosing] = useState(false);
 
@@ -29,27 +28,51 @@ const VotingRoom: React.FC<{ user: User }> = ({ user }) => {
 
   const loadData = async () => {
     if (!id) return;
-    const data = await MockService.getAssemblyById(id);
-    if (data) {
-      setAssembly(data);
-      const userVote = data.votes.find(v => v.userId === user.id);
-      if (userVote) {
-        setHasVoted(true);
-        setVoteReceipt(userVote.hash);
+    try {
+      const data = await api.get(`/assemblies/${id}`);
+      if (data) {
+        setAssembly(data);
+        const userVote = data.votes?.find((v: any) => v.userId === user.id);
+        if (userVote) {
+          setHasVoted(true);
+          setVoteReceipt(userVote.hash);
+        }
       }
+    } catch (error) {
+      console.error("Erro ao carregar assembleia real:", error);
     }
   };
 
   const handleVote = async () => {
     if (!id || !selectedOption) return;
     try {
-      const vote = await MockService.castVote(id, user.id, selectedOption);
+      const vote = await api.post(`/assemblies/${id}/vote?userId=${user.id}&opcao=${selectedOption}`, {});
       setHasVoted(true);
       setVoteReceipt(vote.hash);
-      loadData(); // refresh
+      loadData();
     } catch (e: any) {
       alert(e.message);
     }
+  };
+
+  const handleAiInteraction = async (msg: string) => {
+    try {
+      const roleToSimulate = user.role === 'MANAGER' ? 'Morador' : 'Síndico';
+      await api.post('/chat/gemini-simulate', { message: msg, role: roleToSimulate });
+      loadData();
+    } catch (error) {
+      console.error("Erro na simulação da IA:", error);
+    }
+  };
+
+  const handleSendChat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatMsg.trim() || !id) return;
+    
+    await api.post(`/chat/assemblies/${id}`, { content: chatMsg, userId: user.id });
+    handleAiInteraction(chatMsg);
+    setChatMsg('');
+    loadData();
   };
 
   const handleCloseAssembly = async () => {
@@ -58,7 +81,7 @@ const VotingRoom: React.FC<{ user: User }> = ({ user }) => {
     
     setClosing(true);
     try {
-        await MockService.closeAssembly(id, user.id);
+        await api.post(`/assemblies/${id}/close`, {});
         alert("Assembleia encerrada com sucesso. Ata gerada.");
         loadData();
     } catch(e: any) {
@@ -68,300 +91,238 @@ const VotingRoom: React.FC<{ user: User }> = ({ user }) => {
     }
   };
 
-  const handleSendChat = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatMsg.trim() || !id) return;
-    await MockService.postChatMessage(id, user.id, user.name, chatMsg);
-    setChatMsg('');
-    loadData();
-  };
-
   const runAnalysis = async () => {
-    if (!assembly) return;
-    const messages = assembly.chat.map(c => `${c.userName}: ${c.content}`);
-    setAiAnalysis("Analisando...");
+    if (!assembly || !assembly.chat) return;
+    const messages = assembly.chat.map((c: any) => `${c.userName}: ${c.content}`);
+    setAiAnalysis("Analisando discussão...");
     const result = await analyzeSentiment(messages);
     setAiAnalysis(result);
   }
 
   const downloadDossier = () => {
-      alert("Baixando Dossiê Jurídico (ZIP) contendo: \n- Logs de Auditoria\n- Hashes de Votos\n- Ata em PDF\n- Comprovantes de Convocação");
+      alert("Iniciando download do Dossiê Jurídico (ZIP)...");
+      // CORREÇÃO DO ERRO DE TYPESCRIPT: Acessando via string para evitar erro de ImportMeta
+      const baseUrl = 'http://localhost:8080/api';
+      window.open(`${baseUrl}/assemblies/${id}/dossier`, '_blank');
   };
 
-  if (!assembly) return <div className="p-8 text-center text-slate-500"><Clock className="w-8 h-8 mx-auto mb-2 animate-spin"/> Carregando sala...</div>;
+  if (!assembly) return <div className="p-8 text-center text-slate-500"><Clock className="w-8 h-8 mx-auto mb-2 animate-spin"/> Carregando sala real...</div>;
 
   const isSecret = assembly.votePrivacy === VotePrivacy.SECRET;
   const isManager = user.role === 'MANAGER';
   const isClosed = assembly.status === AssemblyStatus.CLOSED;
 
-  // Calculate stats for manager
-  const totalVotes = assembly.votes.length;
-  const totalFraction = assembly.votes.reduce((acc, v) => acc + v.fraction, 0);
+  const totalVotes = assembly.votes?.length || 0;
+  const totalFraction = assembly.votes?.reduce((acc: number, v: any) => acc + v.fraction, 0) || 0;
 
   return (
     <div className="space-y-6 pb-20">
-      <div className="flex justify-between items-center">
-        <button onClick={() => navigate('/assemblies')} className="flex items-center text-slate-500 hover:text-slate-800">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Voltar para lista
-        </button>
-        {isManager && (
-            <div className="flex bg-slate-100 p-1 rounded-lg">
-                <button 
-                  onClick={() => setActiveTab('VOTE')}
-                  className={`px-3 py-1 text-sm font-medium rounded-md ${activeTab === 'VOTE' ? 'bg-white shadow text-slate-800' : 'text-slate-500'}`}
-                >
-                   Sala de Votação
-                </button>
-                <button 
-                  onClick={() => setActiveTab('MANAGE')}
-                  className={`px-3 py-1 text-sm font-medium rounded-md ${activeTab === 'MANAGE' ? 'bg-white shadow text-slate-800' : 'text-slate-500'}`}
-                >
-                   Gestão & Encerramento
-                </button>
+      <div className="bg-slate-900 p-6 rounded-2xl text-white flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl">
+        <div className="flex items-center gap-4">
+          <button onClick={() => navigate('/assemblies')} className="p-2 hover:bg-slate-800 rounded-full transition-colors">
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold">{assembly.title}</h1>
+            <p className="text-emerald-400 flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+              Sessão em Tempo Real
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowLive(!showLive)}
+            className={`${showLive ? 'bg-slate-700' : 'bg-red-600 animate-pulse'} hover:opacity-90 px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all`}
+          >
+            <Video className="w-5 h-5" />
+            {showLive ? 'Sair da Reunião' : 'Entrar na Assembleia ao Vivo'}
+          </button>
+          
+          {isManager && (
+            <div className="flex bg-slate-800 p-1 rounded-lg">
+                <button onClick={() => setActiveTab('VOTE')} className={`px-4 py-2 text-sm font-medium rounded-md ${activeTab === 'VOTE' ? 'bg-white text-slate-900' : 'text-slate-400'}`}>Votação</button>
+                <button onClick={() => setActiveTab('MANAGE')} className={`px-4 py-2 text-sm font-medium rounded-md ${activeTab === 'MANAGE' ? 'bg-white text-slate-900' : 'text-slate-400'}`}>Gestão</button>
             </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {activeTab === 'MANAGE' && isManager ? (
-          <div className="space-y-6 animate-in fade-in">
-             <div className="bg-slate-900 text-white p-6 rounded-xl shadow-lg">
-                <div className="flex items-start justify-between">
-                    <div>
-                        <h2 className="text-xl font-bold flex items-center gap-2">
-                           <Gavel className="w-5 h-5 text-emerald-400" /> Painel Legal do Síndico
-                        </h2>
-                        <p className="text-slate-400 text-sm mt-1">Controle de quórum e formalização jurídica (Art. 1.354-A CC).</p>
-                    </div>
-                    <div className="text-right">
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${isClosed ? 'bg-red-500' : 'bg-emerald-500'}`}>
-                            {isClosed ? 'ENCERRADA' : 'EM ANDAMENTO'}
-                        </span>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-                    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                        <p className="text-slate-400 text-xs uppercase font-bold">Quórum (Unidades)</p>
-                        <p className="text-2xl font-bold mt-1">{totalVotes} <span className="text-sm text-slate-500 font-normal">presentes</span></p>
-                    </div>
-                    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                         <p className="text-slate-400 text-xs uppercase font-bold">Fração Ideal Total</p>
-                         <p className="text-2xl font-bold mt-1">{(totalFraction * 100).toFixed(4)}%</p>
-                    </div>
-                     <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                         <p className="text-slate-400 text-xs uppercase font-bold">Convocação</p>
-                         <p className="text-2xl font-bold mt-1 text-emerald-400">100% <span className="text-sm text-slate-500 font-normal">entregue</span></p>
-                    </div>
-                </div>
-
-                {!isClosed ? (
-                    <div className="mt-8 border-t border-slate-700 pt-6">
-                        <h3 className="font-bold mb-2">Ações Críticas</h3>
-                        <p className="text-sm text-slate-400 mb-4">Ao encerrar, o sistema calculará os votos ponderados pela fração ideal e gerará a Ata automaticamente.</p>
-                        <button 
-                            onClick={handleCloseAssembly}
-                            disabled={closing}
-                            className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
-                        >
-                            {closing ? 'Processando...' : <><Lock className="w-4 h-4" /> Encerrar Votação e Lavrar Ata</>}
-                        </button>
-                    </div>
-                ) : (
-                    <div className="mt-8 border-t border-slate-700 pt-6">
-                        <h3 className="font-bold mb-2 text-emerald-400 flex items-center"><CheckIcon className="w-5 h-5 mr-2" /> Ata Gerada com Sucesso</h3>
-                         <div className="bg-white text-slate-800 p-4 rounded-lg font-mono text-xs whitespace-pre-wrap max-h-60 overflow-y-auto mb-4">
-                             {assembly.minutes?.content}
-                         </div>
-                         <div className="flex gap-4">
-                             <button className="bg-white text-slate-900 px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-slate-200">
-                                 <FileText className="w-4 h-4" /> Baixar Ata (PDF)
-                             </button>
-                             <button onClick={downloadDossier} className="bg-slate-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-slate-600 border border-slate-600">
-                                 <Shield className="w-4 h-4" /> Exportar Dossiê Jurídico
-                             </button>
-                         </div>
-                    </div>
-                )}
-             </div>
+      {showLive && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in slide-in-from-top-4 duration-500">
+          <div className="lg:col-span-2 aspect-video bg-black rounded-3xl overflow-hidden border-4 border-slate-800 shadow-2xl">
+             <iframe 
+               src={assembly.linkVideoConferencia || `https://meet.jit.si/votzz-${id}`} 
+               className="w-full h-full"
+               allow="camera; microphone; fullscreen; display-capture"
+             ></iframe>
           </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* ... Existing User View ... */}
-            <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-                <div className="flex items-start justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800">{assembly.title}</h1>
-                    <p className="text-slate-500 mt-1">{assembly.type} • ID: {assembly.id}</p>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isClosed ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                         <Clock className="h-3 w-3 mr-1" />
-                         {isClosed ? 'Encerrada' : `Até ${new Date(assembly.endDate).toLocaleDateString()}`}
-                    </span>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isSecret ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
-                        {isSecret ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
-                        {isSecret ? 'Voto Secreto' : 'Voto Aberto'}
-                    </span>
-                </div>
-                </div>
 
-                <div className="mt-6 prose prose-slate max-w-none">
-                <h3 className="text-sm font-bold uppercase text-slate-400">Pauta e Descrição</h3>
-                <p className="text-slate-700 whitespace-pre-line mt-2">{assembly.description}</p>
-                </div>
-
-                <div className="mt-8">
-                <h3 className="text-sm font-bold uppercase text-slate-400 mb-3">Documentos Anexos</h3>
-                <div className="flex flex-wrap gap-3">
-                    {assembly.documents.map((doc, idx) => (
-                    <div key={idx} className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                        <FileText className="h-4 w-4 text-slate-400 mr-2" />
-                        <span className="text-sm text-slate-700">{doc}</span>
-                        <button className="ml-3 text-emerald-600 hover:text-emerald-700">
-                        <Download className="h-4 w-4" />
-                        </button>
-                    </div>
-                    ))}
-                </div>
-                </div>
+          <div className="bg-white rounded-3xl border shadow-sm flex flex-col h-[500px] lg:h-auto">
+            <div className="p-4 border-b font-bold flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-slate-400" />
+                Debate da Unidade
+              </div>
+              <button onClick={runAnalysis} className="text-xs text-purple-600 font-bold hover:underline">Resumir IA</button>
             </div>
-
-            {/* Chat Section */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 flex flex-col h-[500px]">
-                <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
-                <h3 className="font-bold text-slate-800 flex items-center">
-                    <MessageSquare className="h-5 w-5 mr-2 text-slate-500" />
-                    Debate da Assembleia
-                </h3>
-                {isManager && (
-                    <button onClick={runAnalysis} className="text-xs text-purple-600 hover:bg-purple-50 px-2 py-1 rounded">
-                    IA: Resumir Discussão
-                    </button>
-                )}
-                </div>
-                
-                {aiAnalysis && (
-                <div className="mb-4 bg-purple-50 p-3 rounded-lg border border-purple-100 text-sm text-purple-800">
-                    <strong>Análise IA:</strong> {aiAnalysis}
-                </div>
-                )}
-
-                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                {assembly.chat.map((msg) => (
-                    <div key={msg.id} className={`flex flex-col ${msg.userId === user.id ? 'items-end' : 'items-start'}`}>
-                    <div className={`max-w-[80%] rounded-lg px-4 py-2 text-sm ${
-                        msg.userId === user.id ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-100 text-slate-800'
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+               {aiAnalysis && (
+                 <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 text-xs text-purple-800 animate-in zoom-in-95">
+                   <strong>Resumo IA:</strong> {aiAnalysis}
+                 </div>
+               )}
+               {assembly.chat?.map((msg: any) => (
+                  <div key={msg.id} className={`flex flex-col ${msg.userId === user.id ? 'items-end' : 'items-start'}`}>
+                    <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm ${
+                      msg.userId === user.id ? 'bg-emerald-600 text-white' : 'bg-white text-slate-800 border'
                     }`}>
-                        <span className="block text-xs font-bold opacity-50 mb-1">{msg.userName}</span>
-                        {msg.content}
+                      <span className="block text-[10px] font-black uppercase opacity-70 mb-1">{msg.userName}</span>
+                      {msg.content}
                     </div>
-                    <span className="text-xs text-slate-400 mt-1">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                    </div>
-                ))}
-                </div>
-
-                <form onSubmit={handleSendChat} className="mt-4 flex gap-2">
-                <input 
-                    type="text"
-                    value={chatMsg}
-                    onChange={e => setChatMsg(e.target.value)}
-                    placeholder="Digite sua dúvida ou comentário..."
-                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    disabled={isClosed}
-                />
-                <button type="submit" disabled={isClosed} className="bg-slate-900 text-white p-2 rounded-lg hover:bg-slate-800 disabled:opacity-50">
-                    <Send className="h-5 w-5" />
-                </button>
-                </form>
-            </div>
+                  </div>
+               ))}
             </div>
 
-            {/* Right Column: Voting Action */}
-            <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 sticky top-6">
-                <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center">
-                <Lock className="h-5 w-5 mr-2 text-emerald-600" />
-                Cédula de Votação
-                </h3>
-
-                <div className="bg-slate-50 p-3 rounded-lg mb-4 border border-slate-200">
-                     <p className="text-xs text-slate-500 uppercase font-bold mb-1">Seu Poder de Voto</p>
-                     <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-slate-700">Unidade: {user.unit}</span>
-                        <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded font-bold flex items-center">
-                             <Scale className="w-3 h-3 mr-1" /> {(user.fraction * 100).toFixed(4)}%
-                        </span>
-                     </div>
-                </div>
-                
-                {isSecret ? (
-                <div className="flex items-center text-xs text-purple-700 bg-purple-50 p-2 rounded mb-4">
-                    <EyeOff className="w-3 h-3 mr-1" />
-                    Votação Secreta.
-                </div>
-                ) : (
-                <div className="flex items-center text-xs text-blue-700 bg-blue-50 p-2 rounded mb-4">
-                    <Eye className="w-3 h-3 mr-1" />
-                    Voto Aberto.
-                </div>
-                )}
-
-                {hasVoted ? (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-center">
-                    <div className="h-12 w-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <CheckIcon className="h-6 w-6 text-emerald-600" />
-                    </div>
-                    <h4 className="font-bold text-emerald-900">Voto Confirmado</h4>
-                    <p className="text-sm text-emerald-700 mt-1 mb-3">Obrigado por participar.</p>
-                    <div className="text-xs bg-white p-2 rounded border border-emerald-100 text-slate-500 break-all font-mono">
-                    Receipt: {voteReceipt}
-                    </div>
-                </div>
-                ) : isClosed ? (
-                    <div className="bg-slate-100 border border-slate-200 rounded-lg p-4 text-center text-slate-500">
-                        <Lock className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p className="font-bold">Votação Encerrada</p>
-                    </div>
-                ) : (
-                <div className="space-y-3">
-                    {assembly.options.map((opt) => (
-                    <button
-                        key={opt.id}
-                        onClick={() => setSelectedOption(opt.id)}
-                        className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${
-                        selectedOption === opt.id 
-                        ? 'border-emerald-500 ring-1 ring-emerald-500 bg-emerald-50 text-emerald-900' 
-                        : 'border-slate-200 hover:border-slate-300 text-slate-700'
-                        }`}
-                    >
-                        <span className="font-medium">{opt.label}</span>
-                    </button>
-                    ))}
-
-                    <button
-                    onClick={handleVote}
-                    disabled={!selectedOption}
-                    className="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold py-3 rounded-lg shadow-md transition-colors"
-                    >
-                    Confirmar Voto Seguro
-                    </button>
-                </div>
-                )}
-                
-                <div className="mt-6 pt-6 border-t border-slate-100">
-                <div className="flex items-start text-xs text-slate-500">
-                    <FileCheck className="h-4 w-4 mr-2 flex-shrink-0 text-slate-400" />
-                    <p>
-                    Em conformidade com Art. 1.354-A do CC. Hash auditável e imutável.
-                    </p>
-                </div>
-                </div>
-            </div>
-            </div>
+            <form onSubmit={handleSendChat} className="p-4 border-t bg-white rounded-b-3xl flex gap-2">
+              <input 
+                type="text" 
+                value={chatMsg}
+                onChange={(e) => setChatMsg(e.target.value)}
+                placeholder="Mensagem para o condomínio..." 
+                className="flex-1 bg-slate-100 px-4 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" 
+              />
+              <button className="bg-emerald-600 p-2 rounded-xl text-white hover:bg-emerald-700 transition-colors">
+                <Send size={20}/>
+              </button>
+            </form>
+          </div>
         </div>
       )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-white p-6 rounded-3xl border shadow-sm">
+            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <FileText className="text-emerald-600" /> Documentos da Pauta (PDF)
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {assembly.documents?.map((doc: string, idx: number) => (
+                <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border group hover:border-emerald-200 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-red-100 text-red-600 rounded-lg">
+                      <FileText size={18} />
+                    </div>
+                    <span className="text-sm font-medium text-slate-700 truncate max-w-[150px]">{doc}</span>
+                  </div>
+                  <button className="p-2 text-slate-400 hover:text-emerald-600 transition-colors">
+                    <Download size={18} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {activeTab === 'MANAGE' && isManager ? (
+            <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-lg space-y-8">
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                    <p className="text-slate-500 text-xs font-bold uppercase">Quórum Atual</p>
+                    <p className="text-3xl font-black mt-2">{totalVotes}</p>
+                  </div>
+                  <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                    <p className="text-slate-500 text-xs font-bold uppercase">Representação %</p>
+                    <p className="text-3xl font-black mt-2">{(totalFraction * 100).toFixed(2)}%</p>
+                  </div>
+                  <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                    <p className="text-slate-500 text-xs font-bold uppercase">Status Legal</p>
+                    <p className="text-xl font-bold mt-2 text-emerald-400">Auditável</p>
+                  </div>
+               </div>
+
+               {!isClosed && (
+                 <button onClick={handleCloseAssembly} disabled={closing} className="w-full bg-red-600 py-4 rounded-2xl font-black text-lg hover:bg-red-700 disabled:opacity-50 transition-all flex items-center justify-center gap-3">
+                   {closing ? 'Processando Ata...' : <><Lock /> Encerrar e Lavrar Ata Eletrônica</>}
+                 </button>
+               )}
+               
+               {isClosed && (
+                 <div className="p-6 bg-white text-slate-900 rounded-2xl space-y-4">
+                    <h4 className="font-black flex items-center gap-2"><Shield className="text-emerald-600" /> Ata Gerada via Blockchain</h4>
+                    <pre className="text-xs bg-slate-50 p-4 rounded-lg overflow-x-auto font-mono">{assembly.minutes?.content}</pre>
+                    <div className="flex gap-2">
+                       <button onClick={downloadDossier} className="flex-1 bg-slate-900 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2">
+                         <Download size={18} /> Baixar PDF
+                       </button>
+                    </div>
+                 </div>
+               )}
+            </div>
+          ) : (
+            <div className="bg-white p-8 rounded-3xl border shadow-sm">
+               <h3 className="text-lg font-bold text-slate-800 mb-6">Pauta e Deliberação</h3>
+               <p className="text-slate-600 leading-relaxed whitespace-pre-line">{assembly.description}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="lg:col-span-1">
+          <div className="bg-white p-6 rounded-3xl border shadow-xl sticky top-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-black text-slate-800">Cédula Digital</h3>
+              {isSecret ? <EyeOff size={18} className="text-purple-500" /> : <Eye size={18} className="text-blue-500" />}
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl border mb-6">
+               <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Sua Identidade Digital</p>
+               <div className="flex justify-between items-center text-sm">
+                  <span className="font-bold text-slate-700">Unidade {user.unit}</span>
+                  <span className="text-emerald-600 font-black">{(user.fraction * 100).toFixed(4)}%</span>
+               </div>
+            </div>
+
+            {hasVoted ? (
+              <div className="text-center py-8 space-y-4">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                   <FileCheck size={32} />
+                </div>
+                <h4 className="font-black text-slate-800 text-xl">Voto Confirmado</h4>
+                <div className="text-[10px] font-mono bg-slate-50 p-2 rounded border break-all">Hash: {voteReceipt}</div>
+              </div>
+            ) : isClosed ? (
+              <div className="text-center py-10 text-slate-400 font-bold">Votação encerrada pelo administrador.</div>
+            ) : (
+              <div className="space-y-3">
+                {assembly.options?.map((opt: any) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setSelectedOption(opt.id)}
+                    className={`w-full text-left px-5 py-4 rounded-2xl border-2 transition-all font-bold ${
+                      selectedOption === opt.id 
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-900' 
+                      : 'border-slate-100 hover:border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+                <button
+                  onClick={handleVote}
+                  disabled={!selectedOption}
+                  className="w-full mt-4 bg-emerald-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-emerald-100 hover:bg-emerald-700 disabled:bg-slate-200 disabled:shadow-none transition-all"
+                >
+                  Confirmar Voto Seguro
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
