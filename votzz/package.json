@@ -1,38 +1,25 @@
 {
-  "name": "votzz-frontend",
+  "name": "votzz",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@stomp/stompjs": "^7.2.1",
-    "axios": "^1.13.2",
-    "lucide-react": "^0.562.0",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "react-router-dom": "^7.11.0",
-    "recharts": "^3.6.0",
-    "sockjs-client": "^1.6.1",
-    "stompjs": "^2.3.3"
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "@google/genai": "^1.32.0",
+    "lucide-react": "^0.559.0",
+    "recharts": "^3.5.1",
+    "react-router-dom": "^7.10.1"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
-    "@types/node": "^25.0.3",
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
-    "@types/react-router-dom": "^5.3.3",
-    "@types/sockjs-client": "^1.5.4",
-    "@types/stompjs": "^2.3.10",
-    "@vitejs/plugin-react": "^5.1.1",
-    "eslint": "^9.39.1",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.4.24",
-    "globals": "^16.5.0",
-    "vite": "^7.2.4"
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
   }
 }
