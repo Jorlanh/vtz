@@ -1,8 +1,7 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
+import { Dashboard } from './pages/Dashboard';
 import { AssemblyList } from './pages/AssemblyList';
 import { CreateAssembly } from './pages/CreateAssembly';
 import { VotingRoom } from './pages/VotingRoom';
@@ -13,7 +12,6 @@ import GovernanceSales from './pages/GovernanceSales';
 import Blog from './pages/Blog';
 import Pricing from './pages/Pricing';
 import FAQ from './pages/FAQ';
-import Testimonials from './pages/Testimonials';
 import Governance from './pages/Governance';
 import Facilities from './pages/Facilities';
 import Compliance from './pages/Compliance';
@@ -21,58 +19,55 @@ import TermsOfUse from './pages/TermsOfUse';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import { User } from './types';
 
-// Wrapper for protected routes
 interface ProtectedRouteProps {
   user: User | null;
   children: React.ReactNode;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ user, children }) => {
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  // PERSISTÊNCIA: Carrega do localStorage para evitar erro 401 ao dar F5
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('vtz_user');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   const handleLogin = (loggedInUser: User) => {
     setUser(loggedInUser);
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('vtz_user');
+    localStorage.removeItem('vtz_token');
     setUser(null);
   };
 
   return (
     <Router>
       <Routes>
-        {/* Public Routes */}
-        <Route 
-          path="/" 
-          element={<LandingPage user={user} />} 
-        />
-        <Route 
-          path="/governance-solutions" 
-          element={<GovernanceSales user={user} />} 
-        />
+        {/* Rota Inicial: Landing Page */}
+        <Route path="/" element={<LandingPage user={user} />} />
+
+        {/* Rota de Autenticação */}
         <Route 
           path="/login" 
-          element={
-            user ? <Navigate to="/dashboard" /> : <Auth onLogin={handleLogin} />
-          } 
+          element={user ? <Navigate to="/dashboard" /> : <Auth onLogin={handleLogin} />} 
         />
+
+        {/* Rotas Públicas */}
+        <Route path="/governance-solutions" element={<GovernanceSales user={user} />} />
         <Route path="/blog" element={<Blog />} />
-        <Route path="/blog/:slug" element={<Blog />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/faq" element={<FAQ />} />
-        <Route path="/testimonials" element={<Testimonials />} />
         <Route path="/compliance" element={<Compliance />} />
         <Route path="/terms" element={<TermsOfUse />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
 
-        {/* Protected Routes - Wrapped in Layout */}
+        {/* Rotas Protegidas (Exigem Login) */}
         <Route path="/dashboard" element={
           <ProtectedRoute user={user}>
             <Layout user={user} onLogout={handleLogout}>
@@ -100,7 +95,7 @@ const App: React.FC = () => {
         <Route path="/assemblies" element={
           <ProtectedRoute user={user}>
             <Layout user={user} onLogout={handleLogout}>
-              <AssemblyList user={user} />
+              <AssemblyList />
             </Layout>
           </ProtectedRoute>
         } />
@@ -108,7 +103,8 @@ const App: React.FC = () => {
         <Route path="/create-assembly" element={
           <ProtectedRoute user={user}>
             <Layout user={user} onLogout={handleLogout}>
-              {user?.role === 'MANAGER' ? <CreateAssembly /> : <Navigate to="/assemblies" />}
+              {/* Sincronizado com Role SYNDIC do seu DML */}
+              {user?.role === 'SYNDIC' || user?.role === 'ADMIN' ? <CreateAssembly /> : <Navigate to="/assemblies" />}
             </Layout>
           </ProtectedRoute>
         } />
@@ -116,7 +112,7 @@ const App: React.FC = () => {
         <Route path="/assembly/:id" element={
           <ProtectedRoute user={user}>
             <Layout user={user} onLogout={handleLogout}>
-              <VotingRoom user={user} />
+              <VotingRoom />
             </Layout>
           </ProtectedRoute>
         } />
