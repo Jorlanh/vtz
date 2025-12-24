@@ -1,36 +1,55 @@
-
-export enum UserRole {
-  ADMIN = 'ADMIN',
-  MANAGER = 'MANAGER', // Síndico
-  USER = 'USER' // Condômino/Membro
-}
+// ==========================================
+// TIPOS SINCRONIZADOS COM O BACKEND (JAVA)
+// ==========================================
 
 export interface User {
   id: string;
-  name: string;
-  email: string;
-  cpf: string;
-  unit?: string; // Apartamento/Cota
-  fraction: number; // Fração Ideal (ex: 0.0155 para 1.55%)
-  role: UserRole;
-  phone: string;
+  nome: string;       // Sincronizado com User.java
+  email: string;      // Sincronizado com User.java
+  cpf: string;        // Sincronizado com User.java
+  role: 'ADMIN' | 'SYNDIC' | 'RESIDENT'; // Sincronizado com as roles do sistema
+  unit?: string;      
+  tenant?: {          
+    id: string;
+    name: string;
+  };
 }
 
-export enum VoteType {
-  YES_NO_ABSTAIN = 'YES_NO_ABSTAIN',
-  MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
-  CUSTOM = 'CUSTOM'
+// Enum alinhado com Assembly.java > StatusAssembly
+export type AssemblyStatus = 'AGENDADA' | 'ABERTA' | 'ENCERRADA';
+
+export interface Assembly {
+  id: string;
+  titulo: string;            // Sincronizado com Assembly.java
+  description: string;       // Sincronizado com Assembly.java
+  dataInicio: string;        // LocalDateTime -> String ISO
+  dataFim: string;           // LocalDateTime -> String ISO
+  status: AssemblyStatus;    // Sincronizado com Enum Java
+  linkVideoConferencia?: string; // ID do YouTube ou Link completo
+  attachmentUrl?: string;        // URL do PDF da pauta
+  votes?: Vote[];
+  chat?: ChatMessage[];
 }
 
-export enum VotePrivacy {
-  OPEN = 'OPEN',
-  SECRET = 'SECRET'
+// ==========================================
+// TIPOS AUXILIARES E MÓDULOS EXTRAS
+// ==========================================
+
+export interface Vote {
+  id: string;
+  assemblyId: string;
+  userId: string;
+  unit: string;
+  option: 'SIM' | 'NAO' | 'ABSTENCAO'; 
+  timestamp: string;
 }
 
-export enum AssemblyStatus {
-  DRAFT = 'DRAFT',
-  OPEN = 'OPEN',
-  CLOSED = 'CLOSED'
+export interface ChatMessage {
+  id: string;
+  userId: string;
+  userName: string; 
+  content: string;
+  timestamp: string;
 }
 
 export interface VoteOption {
@@ -38,90 +57,11 @@ export interface VoteOption {
   label: string;
 }
 
-export interface Vote {
-  id: string;
-  assemblyId: string;
-  userId: string;
-  unit: string;
-  fraction: number; // Snapshot of fraction at moment of vote
-  optionId: string;
-  timestamp: string;
-  hash: string; // SHA-256 equivalent for audit
-  ipAddress: string;
-  signature?: string; // Digital signature placeholder
-}
-
-export interface ChatMessage {
-  id: string;
-  userId: string;
-  userName: string;
-  content: string;
-  timestamp: string;
-}
-
-export interface ConvocationLog {
-  channel: 'EMAIL' | 'WHATSAPP' | 'APP';
-  sentAt: string;
-  recipientCount: number;
-  confirmedReadCount: number;
-}
-
-export interface AssemblyMinutes {
-  generatedAt: string;
-  content: string; // The text of the minutes
-  signedByManager: boolean;
-  signatureHash: string;
-}
-
-export interface Assembly {
-  id: string;
-  title: string;
-  description: string;
-  type: string; // AGO, AGE, etc.
-  status: AssemblyStatus;
-  startDate: string;
-  endDate: string;
-  quorumType: 'SIMPLE' | 'ABSOLUTE' | 'QUALIFIED_2_3' | 'UNANIMITY';
-  voteType: VoteType;
-  votePrivacy: VotePrivacy; 
-  options: VoteOption[]; 
-  documents: string[]; 
-  votes: Vote[];
-  chat: ChatMessage[];
-  createdBy: string;
-  convocation: ConvocationLog; // Legal requirement
-  minutes?: AssemblyMinutes; // The final document
-}
-
-export interface AuditLog {
-  id: string;
-  action: string;
-  details: string;
-  userId: string;
-  timestamp: string;
-  hash: string; // Chained hash
-}
-
-export interface BlogPost {
-  id: string;
-  slug: string;
-  title: string;
-  excerpt: string;
-  content: string;
-  author: string;
-  date: string;
-  category: string;
-  imageUrl: string;
-  tags: string[];
-}
-
-// Governance Digital Types
-
 export interface Poll {
   id: string;
   title: string;
   description: string;
-  targetAudience: 'ALL' | 'COUNCIL'; // Todos ou Só Conselho
+  targetAudience: 'ALL' | 'COUNCIL';
   status: 'OPEN' | 'CLOSED';
   options: VoteOption[];
   votes: { userId: string; optionId: string }[];
@@ -135,12 +75,13 @@ export interface Announcement {
   content: string;
   date: string;
   priority: 'HIGH' | 'NORMAL' | 'LOW';
-  targetType: 'ALL' | 'BLOCK' | 'UNIT' | 'GROUP'; // Segmentation
-  targetValue?: string; // e.g., "Block A", "Unit 101", "Council"
+  targetType: 'ALL' | 'BLOCK' | 'UNIT' | 'GROUP';
+  targetValue?: string;
   requiresConfirmation: boolean;
-  readBy: string[]; // User IDs
+  readBy: string[];
 }
 
+// FIX: Adicionado export para resolver erro no Governance.tsx
 export interface GovernanceActivity {
   id: string;
   type: 'VOTE' | 'POLL' | 'DOC' | 'COMMUNICATION' | 'BOOKING';
@@ -149,7 +90,9 @@ export interface GovernanceActivity {
   user: string;
 }
 
-// Module: Common Areas & Scheduling
+// ==========================================
+// MÓDULO: ÁREAS COMUNS E RESERVAS
+// ==========================================
 
 export type AreaType = 'PARTY_ROOM' | 'BBQ' | 'GYM' | 'POOL' | 'COURT' | 'MEETING' | 'OTHER';
 
@@ -161,13 +104,13 @@ export interface CommonArea {
   description: string;
   rules: string;
   imageUrl: string;
-  price: number; // 0 for free
+  price: number;
   requiresApproval: boolean;
-  minTimeBlock: number; // in hours
-  maxTimeBlock: number; // in hours
-  cleaningInterval: number; // in hours
-  openTime: string; // "08:00"
-  closeTime: string; // "23:00"
+  minTimeBlock: number;
+  maxTimeBlock: number;
+  cleaningInterval: number;
+  openTime: string;
+  closeTime: string;
 }
 
 export type BookingStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
@@ -177,11 +120,38 @@ export interface Booking {
   areaId: string;
   userId: string;
   unit: string;
-  date: string; // YYYY-MM-DD
-  startTime: string; // HH:mm
-  endTime: string; // HH:mm
+  date: string;
+  startTime: string;
+  endTime: string;
   status: BookingStatus;
   totalPrice: number;
   createdAt: string;
-  approvedBy?: string; // Manager ID
+  approvedBy?: string;
+}
+
+// ==========================================
+// MÓDULO: BLOG E AUDITORIA
+// ==========================================
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  details: string;
+  userId: string;
+  timestamp: string;
+  hash: string;
+}
+
+// FIX: Adicionado export para resolver erro no Blog.tsx
+export interface BlogPost {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  author: string;
+  date: string;
+  category: string;
+  imageUrl: string;
+  tags: string[];
 }
