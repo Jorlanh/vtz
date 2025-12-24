@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Seus estilos globais personalizados podem vir aqui embaixo */
+body {
+  background-color: #f8fafc; /* cor slate-50 para garantir fundo claro */
+  font-family: 'Inter', sans-serif; /* se estiver usando fonte customizada */
+}

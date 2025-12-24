@@ -1,10 +1,9 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Calendar, Type, FileText, ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
-import { generateAssemblyDescription } from '../services/geminiService';
-import { MockService } from '../services/mockDataService';
-import { AssemblyStatus, VoteType, VotePrivacy } from '../types';
+import { Sparkles, Calendar, Type, FileText, ArrowLeft, Loader2, Video } from 'lucide-react';
+import { generateAssemblyDescription } from '../services/geminiService'; // Mantendo IA
+// MockService removido
+import { api } from '../services/api';
 
 const CreateAssembly: React.FC = () => {
   const navigate = useNavigate();
@@ -12,184 +11,147 @@ const CreateAssembly: React.FC = () => {
   const [saving, setSaving] = useState(false);
   
   const [formData, setFormData] = useState({
-    title: '',
+    titulo: '',              // Alterado para corresponder ao Backend
     description: '',
-    startDate: '',
-    endDate: '',
-    type: 'AGE',
+    dataInicio: '',          // Alterado para corresponder ao Backend
+    dataFim: '',             // Alterado para corresponder ao Backend
+    linkVideoConferencia: '',// Campo novo para YouTube
+    tipoAssembleia: 'AGE',   // Enum backend
     quorumType: 'SIMPLE',
-    voteType: VoteType.YES_NO_ABSTAIN,
-    votePrivacy: VotePrivacy.OPEN
+    voteType: 'YES_NO_ABSTAIN',
+    votePrivacy: 'OPEN'
   });
 
   const handleAiGenerate = async () => {
-    if (!formData.title) return alert("Digite um título para o tema primeiro.");
+    if (!formData.titulo) return alert("Digite um título para o tema primeiro.");
     
     setLoadingAi(true);
-    const desc = await generateAssemblyDescription(formData.title, "Foco em transparência e regras do código civil.");
-    setFormData(prev => ({ ...prev, description: desc }));
-    setLoadingAi(false);
+    try {
+      const desc = await generateAssemblyDescription(formData.titulo, "Foco em transparência e regras do código civil.");
+      setFormData(prev => ({ ...prev, description: desc }));
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao gerar descrição com IA");
+    } finally {
+      setLoadingAi(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     
-    // Default options based on type
-    let options = [
-        { id: '1', label: 'Sim' }, 
-        { id: '2', label: 'Não' }, 
-        { id: '3', label: 'Abstenção' }
-    ];
-
-    if (formData.voteType === VoteType.MULTIPLE_CHOICE) {
-        options = [{ id: '1', label: 'Opção A' }, { id: '2', label: 'Opção B' }]; // Simplification for demo
+    try {
+        // Envia para o backend
+        await api.post('/assemblies', formData);
+        navigate('/assemblies');
+    } catch (error) {
+        console.error("Erro ao criar assembleia", error);
+        alert("Erro ao salvar assembleia. Verifique os dados.");
+    } finally {
+        setSaving(false);
     }
-
-    await MockService.createAssembly({
-        ...formData,
-        status: AssemblyStatus.OPEN,
-        options
-    });
-
-    setSaving(false);
-    navigate('/assemblies');
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <button onClick={() => navigate(-1)} className="flex items-center text-slate-500 hover:text-slate-800 transition-colors">
-        <ArrowLeft className="h-4 w-4 mr-1" />
-        Voltar
+    <div className="max-w-3xl mx-auto py-8 px-4">
+      <button onClick={() => navigate('/assemblies')} className="flex items-center text-slate-500 hover:text-slate-800 mb-6 transition-colors">
+        <ArrowLeft className="h-4 w-4 mr-2" /> Voltar para Assembleias
       </button>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-800">Nova Assembleia</h1>
-          <p className="text-slate-500">Configure os detalhes da votação e use a IA para redigir a pauta.</p>
+      
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+           <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+             <Sparkles className="h-6 w-6 text-emerald-500" />
+             Nova Assembleia
+           </h1>
+           <p className="text-slate-500 mt-1">Crie uma pauta de votação segura e imutável.</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Título / Tema</label>
-              <div className="relative">
-                <Type className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
-                <input 
-                  type="text"
-                  value={formData.title}
-                  onChange={e => setFormData({...formData, title: e.target.value})}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="Ex: Aprovação de Reforma do Hall"
-                  required
-                />
-              </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Título */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Título da Pauta</label>
+            <div className="relative">
+               <Type className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+               <input 
+                 type="text" 
+                 value={formData.titulo}
+                 onChange={e => setFormData({...formData, titulo: e.target.value})}
+                 className="pl-10 w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                 placeholder="Ex: Aprovação de Reforma da Fachada"
+                 required
+               />
             </div>
+          </div>
 
-            <div className="col-span-2">
-              <div className="flex justify-between items-center mb-1">
-                 <label className="block text-sm font-medium text-slate-700">Descrição da Pauta (Edital)</label>
-                 <button 
-                   type="button"
-                   onClick={handleAiGenerate}
-                   disabled={loadingAi || !formData.title}
-                   className="text-xs flex items-center bg-purple-100 text-purple-700 px-2 py-1 rounded hover:bg-purple-200 transition-colors disabled:opacity-50"
-                 >
-                   {loadingAi ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
-                   {loadingAi ? 'Gerando...' : 'Gerar com IA'}
-                 </button>
-              </div>
+          {/* Link YouTube */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Link da Live (YouTube)</label>
+            <div className="relative">
+               <Video className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
+               <input 
+                 type="url" 
+                 value={formData.linkVideoConferencia}
+                 onChange={e => setFormData({...formData, linkVideoConferencia: e.target.value})}
+                 className="pl-10 w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                 placeholder="https://youtube.com/live/..."
+               />
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Opcional: Cole o link da transmissão ao vivo.</p>
+          </div>
+
+          {/* Descrição com IA */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-sm font-medium text-slate-700">Descrição Detalhada</label>
+              <button 
+                type="button" 
+                onClick={handleAiGenerate}
+                disabled={loadingAi || !formData.titulo}
+                className="text-xs flex items-center text-purple-600 hover:text-purple-700 font-medium disabled:opacity-50"
+              >
+                {loadingAi ? <Loader2 className="h-3 w-3 animate-spin mr-1"/> : <Sparkles className="h-3 w-3 mr-1"/>}
+                Gerar com Gemini AI
+              </button>
+            </div>
+            <div className="relative">
+              <FileText className="absolute left-3 top-3 h-5 w-5 text-slate-400" />
               <textarea 
-                rows={6}
                 value={formData.description}
                 onChange={e => setFormData({...formData, description: e.target.value})}
-                className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm leading-relaxed"
-                placeholder="Descreva os detalhes para os votantes..."
+                className="pl-10 w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none min-h-[120px]"
+                placeholder="Descreva os detalhes da votação..."
                 required
               />
-              <p className="text-xs text-slate-400 mt-1">
-                A IA ajuda a criar textos formais, mas você deve revisar o conteúdo antes de publicar.
-              </p>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Assembleia</label>
-              <select 
-                value={formData.type}
-                onChange={e => setFormData({...formData, type: e.target.value})}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
-              >
-                <option value="AGE">AGE - Extraordinária</option>
-                <option value="AGO">AGO - Ordinária</option>
-                <option value="REUNIAO">Reunião Geral</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Privacidade do Voto</label>
-              <div className="relative">
-                <select 
-                  value={formData.votePrivacy}
-                  onChange={e => setFormData({...formData, votePrivacy: e.target.value as VotePrivacy})}
-                  className="w-full pl-10 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white appearance-none"
-                >
-                  <option value={VotePrivacy.OPEN}>Voto Aberto (Público)</option>
-                  <option value={VotePrivacy.SECRET}>Voto Secreto (Anônimo)</option>
-                </select>
-                <div className="absolute left-3 top-2.5 pointer-events-none text-slate-500">
-                   {formData.votePrivacy === VotePrivacy.SECRET ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Votação</label>
-              <select 
-                value={formData.voteType}
-                onChange={e => setFormData({...formData, voteType: e.target.value as VoteType})}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
-              >
-                <option value={VoteType.YES_NO_ABSTAIN}>Sim / Não / Abstenção</option>
-                <option value={VoteType.MULTIPLE_CHOICE}>Múltipla Escolha</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Quórum Necessário</label>
-              <select 
-                value={formData.quorumType}
-                onChange={e => setFormData({...formData, quorumType: e.target.value as any})}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
-              >
-                <option value="SIMPLE">Maioria Simples (Presentes)</option>
-                <option value="ABSOLUTE">Maioria Absoluta (Total Unidades)</option>
-                <option value="QUALIFIED">Qualificado (2/3)</option>
-              </select>
-            </div>
-
+          {/* Datas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Data Início</label>
               <input 
                 type="datetime-local"
-                value={formData.startDate}
-                onChange={e => setFormData({...formData, startDate: e.target.value})}
+                value={formData.dataInicio}
+                onChange={e => setFormData({...formData, dataInicio: e.target.value})}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 required
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Data Fim</label>
               <input 
                 type="datetime-local"
-                value={formData.endDate}
-                onChange={e => setFormData({...formData, endDate: e.target.value})}
+                value={formData.dataFim}
+                onChange={e => setFormData({...formData, dataFim: e.target.value})}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 required
               />
             </div>
           </div>
 
+          {/* Botões de Ação */}
           <div className="pt-6 border-t border-slate-100 flex justify-end space-x-3">
              <button 
               type="button" 
@@ -204,7 +166,7 @@ const CreateAssembly: React.FC = () => {
               className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {saving ? 'Criando...' : 'Criar Assembleia'}
+              {saving ? 'Criando...' : 'Criar Assembleia Oficial'}
             </button>
           </div>
         </form>
