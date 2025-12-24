@@ -1,120 +1,137 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
-// Layout e Componentes
+import React, { useState } from 'react';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
-import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
-import LandingPage from './pages/LandingPage';
-
-// Outras Páginas
 import AssemblyList from './pages/AssemblyList';
 import CreateAssembly from './pages/CreateAssembly';
 import VotingRoom from './pages/VotingRoom';
-import Governance from './pages/Governance';
 import Reports from './pages/Reports';
-import Facilities from './pages/Facilities';
+import Auth from './pages/Auth';
+import LandingPage from './pages/LandingPage';
+import GovernanceSales from './pages/GovernanceSales';
 import Blog from './pages/Blog';
+import Pricing from './pages/Pricing';
 import FAQ from './pages/FAQ';
+import Testimonials from './pages/Testimonials';
+import Governance from './pages/Governance';
+import Facilities from './pages/Facilities';
+import Compliance from './pages/Compliance';
+import TermsOfUse from './pages/TermsOfUse';
 import PrivacyPolicy from './pages/PrivacyPolicy';
-
 import { User } from './types';
+
+// Wrapper for protected routes
+interface ProtectedRouteProps {
+  user: User | null;
+  children: React.ReactNode;
+}
+
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ user, children }) => {
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+};
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  // 1. EFEITO DE PERSISTÊNCIA: Recupera o usuário ao recarregar a página
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const storedToken = localStorage.getItem('accessToken');
-    
-    if (storedUser && storedToken) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Erro ao restaurar sessão");
-        localStorage.clear();
-      }
-    }
-    setLoading(false);
-  }, []);
-
-  // 2. HANDLERS DE LOGIN/LOGOUT
-  const handleLogin = (loggedUser: User) => {
-    setUser(loggedUser);
-    localStorage.setItem('user', JSON.stringify(loggedUser));
+  const handleLogin = (loggedInUser: User) => {
+    setUser(loggedInUser);
   };
 
   const handleLogout = () => {
     setUser(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('accessToken');
-  };
-
-  // 3. PROTEÇÃO DE TELA BRANCA: Não renderiza rotas enquanto carrega
-  if (loading) {
-    return <div className="h-screen flex items-center justify-center text-slate-500">Carregando Votzz...</div>;
-  }
-
-  // 4. COMPONENTE DE ROTA PROTEGIDA
-  const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-    if (!user) {
-      return <Navigate to="/login" replace />;
-    }
-    return <Layout user={user} onLogout={handleLogout}>{children}</Layout>;
   };
 
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
-        {/* --- ROTAS PÚBLICAS --- */}
-        <Route path="/" element={<LandingPage user={user} />} />
-        
+        {/* Public Routes */}
+        <Route 
+          path="/" 
+          element={<LandingPage user={user} />} 
+        />
+        <Route 
+          path="/governance-solutions" 
+          element={<GovernanceSales user={user} />} 
+        />
         <Route 
           path="/login" 
-          element={user ? <Navigate to="/dashboard" replace /> : <Auth onLogin={handleLogin} />} 
+          element={
+            user ? <Navigate to="/dashboard" /> : <Auth onLogin={handleLogin} />
+          } 
         />
-
-        {/* Páginas Institucionais */}
         <Route path="/blog" element={<Blog />} />
         <Route path="/blog/:slug" element={<Blog />} />
+        <Route path="/pricing" element={<Pricing />} />
         <Route path="/faq" element={<FAQ />} />
+        <Route path="/testimonials" element={<Testimonials />} />
+        <Route path="/compliance" element={<Compliance />} />
+        <Route path="/terms" element={<TermsOfUse />} />
         <Route path="/privacy" element={<PrivacyPolicy />} />
 
-        {/* --- ROTAS PRIVADAS --- */}
+        {/* Protected Routes - Wrapped in Layout */}
         <Route path="/dashboard" element={
-          <ProtectedRoute><Dashboard user={user} /></ProtectedRoute>
-        } />
-        
-        <Route path="/assemblies" element={
-          <ProtectedRoute><AssemblyList user={user} /></ProtectedRoute>
-        } />
-        
-        <Route path="/assemblies/new" element={
-          <ProtectedRoute><CreateAssembly /></ProtectedRoute>
-        } />
-        
-        <Route path="/assembly/:id" element={
-          <ProtectedRoute><VotingRoom user={user!} /></ProtectedRoute>
+          <ProtectedRoute user={user}>
+            <Layout user={user} onLogout={handleLogout}>
+              <Dashboard user={user} />
+            </Layout>
+          </ProtectedRoute>
         } />
         
         <Route path="/governance" element={
-          <ProtectedRoute><Governance user={user} /></ProtectedRoute>
+          <ProtectedRoute user={user}>
+            <Layout user={user} onLogout={handleLogout}>
+              <Governance user={user} />
+            </Layout>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/facilities" element={
+          <ProtectedRoute user={user}>
+            <Layout user={user} onLogout={handleLogout}>
+              <Facilities user={user} />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/assemblies" element={
+          <ProtectedRoute user={user}>
+            <Layout user={user} onLogout={handleLogout}>
+              <AssemblyList user={user} />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/create-assembly" element={
+          <ProtectedRoute user={user}>
+            <Layout user={user} onLogout={handleLogout}>
+              {user?.role === 'MANAGER' ? <CreateAssembly /> : <Navigate to="/assemblies" />}
+            </Layout>
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/assembly/:id" element={
+          <ProtectedRoute user={user}>
+            <Layout user={user} onLogout={handleLogout}>
+              <VotingRoom user={user} />
+            </Layout>
+          </ProtectedRoute>
         } />
         
         <Route path="/reports" element={
-          <ProtectedRoute><Reports /></ProtectedRoute>
-        } />
-        
-        <Route path="/facilities" element={
-          <ProtectedRoute><Facilities user={user} /></ProtectedRoute>
+          <ProtectedRoute user={user}>
+            <Layout user={user} onLogout={handleLogout}>
+              <Reports />
+            </Layout>
+          </ProtectedRoute>
         } />
 
-        {/* Rota Coringa (404) */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
-    </BrowserRouter>
+    </Router>
   );
 };
 

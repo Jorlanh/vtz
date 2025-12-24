@@ -1,26 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Download, Search, AlertCircle, Loader2 } from 'lucide-react';
-import { api } from '../services/api'; // Usando API Real
+import { Download, Search } from 'lucide-react';
+import { MockService } from '../services/mockDataService';
 import { AuditLog } from '../types';
 
 const Reports: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchLogs();
+    MockService.getAuditLogs().then(setLogs);
   }, []);
-
-  const fetchLogs = async () => {
-    try {
-      const response = await api.get('/audit-logs');
-      setLogs(response.data);
-    } catch (error) {
-      console.error("Erro ao buscar logs de auditoria", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -58,29 +46,24 @@ const Reports: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center"><Loader2 className="animate-spin h-6 w-6 mx-auto text-emerald-500"/></td>
+              {logs.map((log) => (
+                <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4 font-mono text-slate-600">
+                    {new Date(log.timestamp).toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                      {log.action}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-slate-600">{log.userId}</td>
+                  <td className="px-6 py-4 text-slate-800">{log.details}</td>
                 </tr>
-              ) : logs.length === 0 ? (
+              ))}
+              {logs.length === 0 && (
                  <tr>
                    <td colSpan={4} className="px-6 py-8 text-center text-slate-500">Nenhum registro de auditoria encontrado.</td>
                  </tr>
-              ) : (
-                logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-mono text-slate-600">
-                      {log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                        {log.action || 'AÇÃO'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 font-mono text-xs">{log.userId}</td>
-                    <td className="px-6 py-4 text-slate-800 max-w-xs truncate">{JSON.stringify(log.details) || log.details || '-'}</td>
-                  </tr>
-                ))
               )}
             </tbody>
           </table>

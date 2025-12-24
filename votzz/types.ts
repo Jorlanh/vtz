@@ -1,20 +1,25 @@
-// --- ENUMS & TYPES BÁSICOS ---
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   MANAGER = 'MANAGER', // Síndico
-  RESIDENT = 'RESIDENT' // Condômino
+  USER = 'USER' // Condômino/Membro
 }
 
-export enum AssemblyStatus {
-  DRAFT = 'DRAFT',
-  OPEN = 'OPEN',
-  CLOSED = 'CLOSED',
-  SCHEDULED = 'SCHEDULED'
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  cpf: string;
+  unit?: string; // Apartamento/Cota
+  fraction: number; // Fração Ideal (ex: 0.0155 para 1.55%)
+  role: UserRole;
+  phone: string;
 }
 
 export enum VoteType {
   YES_NO_ABSTAIN = 'YES_NO_ABSTAIN',
-  MULTIPLE_CHOICE = 'MULTIPLE_CHOICE'
+  MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
+  CUSTOM = 'CUSTOM'
 }
 
 export enum VotePrivacy {
@@ -22,114 +27,80 @@ export enum VotePrivacy {
   SECRET = 'SECRET'
 }
 
-// --- USUÁRIO ---
-export interface User {
-  id: string;          // UUID
-  nome: string;        // Backend: 'nome'
-  email: string;
-  cpf?: string;
-  unidade: string;     // Backend: 'unidade'
-  role: UserRole;
-  phone?: string;
-  fraction?: number;
-  tenantId?: string;
+export enum AssemblyStatus {
+  DRAFT = 'DRAFT',
+  OPEN = 'OPEN',
+  CLOSED = 'CLOSED'
 }
 
-// --- ASSEMBLEIAS E VOTAÇÃO (MODULO ASSEMBLEIA) ---
 export interface VoteOption {
   id: string;
-  descricao: string;   // Backend usa 'descricao'
-  label?: string;      // Alias para compatibilidade de frontend
-  assemblyId?: string;
+  label: string;
 }
 
 export interface Vote {
   id: string;
-  userId: string;
   assemblyId: string;
-  voteOptionId: string; // ID da opção escolhida
+  userId: string;
+  unit: string;
+  fraction: number; // Snapshot of fraction at moment of vote
+  optionId: string;
   timestamp: string;
-  hash?: string;        // Hash de auditoria
+  hash: string; // SHA-256 equivalent for audit
+  ipAddress: string;
+  signature?: string; // Digital signature placeholder
+}
+
+export interface ChatMessage {
+  id: string;
+  userId: string;
+  userName: string;
+  content: string;
+  timestamp: string;
+}
+
+export interface ConvocationLog {
+  channel: 'EMAIL' | 'WHATSAPP' | 'APP';
+  sentAt: string;
+  recipientCount: number;
+  confirmedReadCount: number;
+}
+
+export interface AssemblyMinutes {
+  generatedAt: string;
+  content: string; // The text of the minutes
+  signedByManager: boolean;
+  signatureHash: string;
 }
 
 export interface Assembly {
   id: string;
-  titulo: string;       // JPA: titulo
-  description: string;  
-  tipoAssembleia: string; 
-  status: AssemblyStatus | string;
-  dataInicio: string;   
-  dataFim: string;      
-  linkVideoConferencia?: string;
-  quorumType?: string;
-  voteType?: VoteType | string;
-  votePrivacy?: VotePrivacy | string;
-  
-  // Relacionamentos
-  pollOptions?: VoteOption[]; 
-  votes?: Vote[];
-  
-  // Opcionais
-  minutes?: { content: string; signed: boolean };
-}
-
-// --- GOVERNANÇA (ENQUETES E COMUNICADOS) ---
-
-export interface PollOption {
-  id: string;
-  descricao: string;
-  label?: string; // Para evitar erro se o front tentar acessar .label
-}
-
-export interface PollVote {
-  userId: string;
-  optionId: string;
-}
-
-export interface Poll {
-  id: string;
   title: string;
   description: string;
-  status: 'OPEN' | 'CLOSED';
-  targetAudience?: string; // 'ALL' | 'COUNCIL'
-  options: PollOption[];
-  votes: PollVote[];
-  endDate?: string;
+  type: string; // AGO, AGE, etc.
+  status: AssemblyStatus;
+  startDate: string;
+  endDate: string;
+  quorumType: 'SIMPLE' | 'ABSOLUTE' | 'QUALIFIED_2_3' | 'UNANIMITY';
+  voteType: VoteType;
+  votePrivacy: VotePrivacy; 
+  options: VoteOption[]; 
+  documents: string[]; 
+  votes: Vote[];
+  chat: ChatMessage[];
+  createdBy: string;
+  convocation: ConvocationLog; // Legal requirement
+  minutes?: AssemblyMinutes; // The final document
 }
-
-export interface Announcement {
-  id: string;
-  title: string;
-  content: string;
-  priority: 'NORMAL' | 'HIGH' | 'LOW';
-  targetType: 'ALL' | 'BLOCK' | 'UNIT';
-  targetValue?: string;
-  date: string; // ISO String
-  requiresConfirmation: boolean;
-  readBy: string[]; // Lista de IDs de usuários que leram
-}
-
-export interface GovernanceActivity {
-  id: string;
-  type: string; // 'VOTE' | 'POLL' | 'DOC' | 'COMMUNICATION'
-  description: string;
-  date: string;
-  user: string;
-}
-
-// --- RELATÓRIOS E AUDITORIA ---
 
 export interface AuditLog {
   id: string;
-  timestamp: string;
   action: string;
+  details: string;
   userId: string;
-  details: string; // Pode ser string JSON ou texto simples
-  ipAddress?: string;
-  hash?: string;
+  timestamp: string;
+  hash: string; // Chained hash
 }
-
-// --- BLOG E OUTROS ---
 
 export interface BlogPost {
   id: string;
@@ -144,9 +115,73 @@ export interface BlogPost {
   tags: string[];
 }
 
-// --- FINANCEIRO ---
+// Governance Digital Types
 
-export interface FinancialBalance {
-  total: number;
-  lastUpdate: string;
+export interface Poll {
+  id: string;
+  title: string;
+  description: string;
+  targetAudience: 'ALL' | 'COUNCIL'; // Todos ou Só Conselho
+  status: 'OPEN' | 'CLOSED';
+  options: VoteOption[];
+  votes: { userId: string; optionId: string }[];
+  endDate: string;
+  createdBy: string;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  date: string;
+  priority: 'HIGH' | 'NORMAL' | 'LOW';
+  targetType: 'ALL' | 'BLOCK' | 'UNIT' | 'GROUP'; // Segmentation
+  targetValue?: string; // e.g., "Block A", "Unit 101", "Council"
+  requiresConfirmation: boolean;
+  readBy: string[]; // User IDs
+}
+
+export interface GovernanceActivity {
+  id: string;
+  type: 'VOTE' | 'POLL' | 'DOC' | 'COMMUNICATION' | 'BOOKING';
+  description: string;
+  date: string;
+  user: string;
+}
+
+// Module: Common Areas & Scheduling
+
+export type AreaType = 'PARTY_ROOM' | 'BBQ' | 'GYM' | 'POOL' | 'COURT' | 'MEETING' | 'OTHER';
+
+export interface CommonArea {
+  id: string;
+  name: string;
+  type: AreaType;
+  capacity: number;
+  description: string;
+  rules: string;
+  imageUrl: string;
+  price: number; // 0 for free
+  requiresApproval: boolean;
+  minTimeBlock: number; // in hours
+  maxTimeBlock: number; // in hours
+  cleaningInterval: number; // in hours
+  openTime: string; // "08:00"
+  closeTime: string; // "23:00"
+}
+
+export type BookingStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
+
+export interface Booking {
+  id: string;
+  areaId: string;
+  userId: string;
+  unit: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  status: BookingStatus;
+  totalPrice: number;
+  createdAt: string;
+  approvedBy?: string; // Manager ID
 }

@@ -1,33 +1,61 @@
-import axios from 'axios';
+const API_BASE_URL = 'http://localhost:8080/api';
 
-const API_URL = 'http://localhost:8080/api';
+// IDs fixos para teste enquanto o login é simulado no front
+const DEFAULT_TENANT = '4f0e695d-7973-4537-8e6d-74d306b3f71c'; 
+const DEFAULT_USER = '1';
 
-export const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
+export const api = {
+  async get(endpoint: string) {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      headers: {
+        'X-Tenant-ID': DEFAULT_TENANT,
+        'X-Simulated-User': DEFAULT_USER,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) throw new Error('Erro na busca de dados');
+    return response.json();
   },
-});
 
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
+  async post(endpoint: string, data: any) {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'X-Tenant-ID': DEFAULT_TENANT,
+        'X-Simulated-User': DEFAULT_USER,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Erro ao salvar dados');
+    return response.json();
   },
-  (error) => Promise.reject(error)
-);
 
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 403 || error.response?.status === 401) {
-      console.warn("Sessão expirada.");
-      // localStorage.removeItem('accessToken');
-      // window.location.href = '/auth';
-    }
-    return Promise.reject(error);
+  async patch(endpoint: string, data: any) {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'PATCH',
+      headers: {
+        'X-Tenant-ID': DEFAULT_TENANT,
+        'X-Simulated-User': DEFAULT_USER,
+        'Content-Type': 'application/json',
+      },
+      body: typeof data === 'string' ? data : JSON.stringify(data),
+    });
+    if (!response.ok) throw new Error('Erro ao atualizar dados');
+    return response.json();
+  },
+
+  // ADICIONADO: Método DELETE que estava faltando e causando erro
+  async delete(endpoint: string) {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'DELETE',
+      headers: {
+        'X-Tenant-ID': DEFAULT_TENANT,
+        'X-Simulated-User': DEFAULT_USER,
+        'Content-Type': 'application/json',
+      }
+    });
+    if (!response.ok) throw new Error('Erro ao excluir dados');
+    return response.status === 204 ? null : response.json();
   }
-);
+};
